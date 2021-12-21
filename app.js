@@ -1,4 +1,4 @@
-export default function appSrc(express, bodyParser, createReadStream, crypto, http, mongo) {
+export default (express, bodyParser, fs, crypto, http, mongodb, path, cors) => {
   const app = express()
   const author = 'glazkopolina'
 
