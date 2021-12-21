@@ -7,11 +7,13 @@ export default (express, bodyParser, fs, crypto, http, mongodb, path, cors) => {
 
     app.use(bodyParser.json());
     app.use(express.urlencoded());
-    app.use(function (req, res, next) {
-        res.header("Access-Control-Allow-Origin", "*");
-        res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    app.use((req, res, next) => {
+        res.setHeader('Content-Type', 'text/plain')
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
+
         next()
-    });
+    })
 
     app.use(cors());
     app.options('*', cors());
