@@ -17,6 +17,9 @@ export default (express, bodyParser, fs, crypto, http, mongodb, path, cors) => {
       next()
   })
   
+  app.use(cors());
+  app.options('*', cors());
+  
   app.get('/login/', (req, res) => {
       res.send(author)
   })
