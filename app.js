@@ -1,122 +1,115 @@
 export default (express, bodyParser, fs, crypto, http, mongodb, path, cors) => {
-  const app = express()
-  const author = 'glazkopolina'
+    const app = express();
+    const __dirname = path.resolve();
+    app.set('view engine', 'pug');
+    app.set('views', path.join(__dirname, 'public'));
+    app.use(express.static(path.join(__dirname, 'public')));
 
-  const __dirname = path.resolve();
-  app.set('view engine', 'pug');
-  app.set('views', path.join(__dirname, 'public'));
-  app.use(express.static(path.join(__dirname, 'public')));
+    app.use(bodyParser.json());
+    app.use(express.urlencoded());
+    app.use(function (req, res, next) {
+        res.header("Access-Control-Allow-Origin", "*");
+        res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+        next()
+    });
 
-  app.use(bodyParser.json());
-  app.use(express.urlencoded());
+    app.use(cors());
+    app.options('*', cors());
 
-  app.use((req, res, next) => {
-      res.setHeader('Access-Control-Allow-Origin', '*')
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
-
-      next()
-  })
-  
-  app.use(cors());
-  app.options('*', cors());
-  
-  app.get('/login/', (req, res) => {
-      res.send(author)
-  })
-
-  app.get('/code/', (req, res) => {
-      let filePath = import.meta.url.replace(/^file:\/+/, '')
-
-      if (! filePath.includes(':')) {
-          filePath = `/${filePath}`
-      }
-
-      createReadStream(filePath).pipe(res)
-  })
-
-  app.get('/sha1/:input', ({ params }, res) => {
-      const { input } = params
-
-      const hash = crypto.createHash('sha1').update(input).digest('hex')
-
-      res.send(hash);
-  })
-  
-    app.get('/req/', ({ query }, res) => {
-        const { addr } = query
-
-        http.get(addr, httpRes => {
-            httpRes.setEncoding('utf8')
-
-            let data = ''
-
-            httpRes.on('data', chunk => { data += chunk })
-
-            httpRes.on('end', () => {
-                res.send(data)
-            })
-        })
-    })
-    
-    app.get('/wordpress/wp-json/wp/v2/posts/1', (req, res) => res.status(200).json({title: {id: 1, rendered: "glazkopolina"}}))
-    app.get('/wordpress/', (req, res) => res.status(200).render('wordpress'))
-  
-    app.post('/render/', (req, res) => {
-        const {random2, random3} = req.body;
+    app 
+        .get('/wordpress/wp-json/wp/v2/posts/1', (req, res) => res.status(200).json({title: {id: 1, rendered: "glazkopolina"}}))
+        .post('/render/', (req, res) => {
+            const {random2, random3} = req.body;
 
 
-        let { addr } = req.query;
+            let { addr } = req.query;
 
-        console.log(addr);
-
-        res.render('random', {random2: random2, random3: random3,});
+            console.log(addr);
+            
+            res.render('random', {random2: random2, random3: random3,});
       
-    })
-    
-    app.post('/req/', ({ body }, res) => {
-        const { addr } = body
-
-        http.get(addr, httpRes => {
-            httpRes.setEncoding('utf8')
-
-            let data = ''
-
-            httpRes.on('data', chunk => { data += chunk })
-
-            httpRes.on('end', () => {
-                res.send(data)
-            })
         })
-    })
-  
-    app.post('/insert/', async ({ body }, res) => {
-        const { login, password, URL  } = body
+        .get('/wordpress/', (req, res) => res.status(200).render('wordpress'))
+        .post('/insert/', async (req, res) => {
+            const {login, password, URL} = req.body;
 
-        const UserSchema = mongo.Schema({
-            login: String,
-            password: String,
-        })
+            console.log(URL);
 
-        const User = mongo.model('User', UserSchema)
+            const client = new mongodb.MongoClient(URL);
 
-        const connection = await mongo.connect(URL, { useNewUrlParser: true, useUnifiedTopology: true })
+            try {
+                await client.connect();
 
-        const user = new User({ login, password })
-        
-        user.save((e) => {
-            connection.disconnect()
+                const database = client.db('readusers');
+                const collection = database.collection('users');
+                const doc = { login: login, password: password };
+                const result = await collection.insertOne(doc);
 
-            if (e) {
-                return res.send(e.message)
+            } catch(error) {
+                console.log(error);
+            } finally {
+                await client.close();
             }
 
-            return res.send(user)
+            res.status(200).end();
+        
         })
-    })
-    
-    app.all('*', (req, res) => {
-        res.send(author)
-    })
+        .get('/login/', (req, res) => res.send('glazkopolina'))
+        .get('/code/', (req, res) => fs.createReadStream(import.meta.url.substring(7)).pipe(res))
+        .get('/sha1/:input/', (req, res) => {
+            const { input } = req.params;
+            res.setHeader('content-type', 'text/plain');
+            res.send(crypto.createHash('sha1').update(input).digest('hex'));
+        })
+        .get('/req', (req, res) => {
+            res.setHeader('content-type', 'text/plain');
 
-    return app
+            let { addr } = req.query;
+
+            http.get(addr, (response) => {
+                response.setEncoding('utf8');
+                let rawData = '';
+                response.on('data', (chunk) => { rawData += chunk; });
+                response.on('end', () => {
+                    try {
+                        const parsedData = JSON.parse(rawData);
+                        console.log(parsedData);
+                        res.send(JSON.stringify(parsedData));
+                    } catch (e) {
+                        console.error(e.message);
+                    }
+                });
+            }).on('error', (e) => {
+                console.error(`Got error: ${e.message}`);
+            });
+
+        })
+        .post('/req', (req, res) => {
+            res.setHeader('content-type', 'text/plain');
+
+            let addr = req.body.addr;
+
+            http.get(addr, (response) => {
+                response.setEncoding('utf8');
+                let rawData = '';
+                response.on('data', (chunk) => { rawData += chunk; });
+                response.on('end', () => {
+                    try {
+                        const parsedData = JSON.parse(rawData);
+                        console.log(parsedData);
+                        res.send(JSON.stringify(parsedData));
+                    } catch (e) {
+                        console.error(e.message);
+                    }
+                });
+            }).on('error', (e) => {
+                console.error(`Got error: ${e.message}`);
+            });
+        })
+        .all('*', (req, res) => {
+            res.send('glazkopolina');
+        });
+
+
+    return app;
 }
